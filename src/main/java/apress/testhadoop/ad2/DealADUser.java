@@ -2,12 +2,15 @@ package apress.testhadoop.ad2;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FilterFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -15,6 +18,7 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
 import java.io.IOException;
+import java.net.URI;
 
 public class DealADUser extends Configured implements Tool{
     public static class MyMapper extends Mapper<LongWritable, Text, Text, MapWritable>{
@@ -57,11 +61,35 @@ public class DealADUser extends Configured implements Tool{
         }
     }
 
+    String[] dataInpuPath = {"hdfs://master:9000/user/dbcluster/ADintput"};
+    String[] dataOutPath = {"hdfs://master:9000/user/dbcluster/ADoutput"};
+
+    public void setup(Configuration configuration) throws Exception {
+        FileSystem hdfs = FileSystem.get(URI.create("hdfs://master:9000"), configuration);
+
+        Path input = new Path(dataInpuPath[0]);
+        Path output = new Path(dataOutPath[0]);
+
+        if (hdfs.exists(output)){
+            hdfs.delete(output, true);
+        }
+    }
+
     public int run(String[] allArgs) throws Exception{
-        Job job = Job.getInstance(getConf());
+        Configuration conf = getConf();
+        Job job = Job.getInstance(conf);
+        Configuration jobConf = job.getConfiguration();
+        setup(conf);
+
+        job.setJobName("DealADApplication");
         job.setJarByClass(DealADUser.class);
-        FileInputFormat.addInputPath(job, new Path(allArgs[0]));
+        String[] inputPath = dataInpuPath[0].split("/");
+        //FileInputFormat.addInputPath(job, new Path("ADinput"));
+        job.setInputFormatClass(TextInputFormat.class);
+        jobConf.set("mapred.input.dir", "ADinput");
+        //jobConf.setBoolean("mapred.compress.map.output", true);
         job.setOutputFormatClass(TextOutputFormat.class);
+        jobConf.set("mapred.output.dir", "ADoutput");
 
         job.setMapperClass(MyMapper.class);
         job.setReducerClass(MyReducer.class);
@@ -71,10 +99,10 @@ public class DealADUser extends Configured implements Tool{
 
         job.setOutputKeyClass(NullWritable.class);
         job.setOutputValueClass(Text.class);
-        job.setNumReduceTasks(2);
+        job.setNumReduceTasks(1);
 
-        String[] args = new GenericOptionsParser(getConf(), allArgs).getRemainingArgs();
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        //String[] args = new GenericOptionsParser(getConf(), allArgs).getRemainingArgs();
+        //FileOutputFormat.setOutputPath(job, new Path("ADoutput"));
         job.waitForCompletion(true);
 
         return 0;
